@@ -10,6 +10,8 @@ import android.nfc.Tag;
 import android.nfc.tech.MifareClassic;
 import android.os.Bundle;
 import android.util.Log;
+import android.view.View;
+import android.widget.Button;
 import android.widget.TextView;
 
 import java.io.IOException;
@@ -19,12 +21,17 @@ public class MainActivity extends AppCompatActivity {
     // https://www.demo2s.com/android/android-mifareclassic-tutorial-with-examples.html
     // example 1
 
+    // this works with a background thread like AndroidNfcOwn1, taken from MifareClassicToolOwn
+
     private NfcAdapter nfcAdapter;
     private PendingIntent pendingIntent;
     private IntentFilter[] intentFilter;
     private String[][] techListsArray;
 
     TextView textView;
+
+    Button mctRoutines;
+    Intent mctRoutinesIntent;
 
     String TAG = "NfcOwn1";
 
@@ -33,6 +40,9 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
         textView = findViewById(R.id.data);
+        mctRoutines = findViewById(R.id.btnMctRoutines);
+        mctRoutinesIntent = new Intent(MainActivity.this, MctRoutines.class);
+
 
         //Variabili per l'nfc
         this.nfcAdapter = NfcAdapter.getDefaultAdapter(this);
@@ -40,6 +50,13 @@ public class MainActivity extends AppCompatActivity {
                 new Intent(this, getClass()).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP), 0);
         this.intentFilter = new IntentFilter[]{new IntentFilter(NfcAdapter.ACTION_TAG_DISCOVERED)};
         this.techListsArray = new String[][]{new String[]{MifareClassic.class.getName()}};
+
+        mctRoutines.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                startActivity(mctRoutinesIntent);
+            }
+        });
     }
 
     @Override
@@ -67,75 +84,20 @@ public class MainActivity extends AppCompatActivity {
         int b_len = mif.getBlockCount();
         Log.d(TAG, "tag block count: " + b_len);
         textView.setText(textView.getText() + "\n" + "tag block count: " + b_len);
-        try {
-            mif.connect();
-            if (mif.isConnected()) {
 
-                for (int i = 0; i < s_len; i++) {
+        Log.d(TAG, "## STARTING READING THREAD ##");
+        textView.setText(textView.getText() + "\n" + "## STARTING READING THREAD ##");
 
-                    boolean isAuthenticated = false;
-
-                    if (mif.authenticateSectorWithKeyA(i, MifareClassic.KEY_MIFARE_APPLICATION_DIRECTORY)) {
-                        isAuthenticated = true;
-                    } else if (mif.authenticateSectorWithKeyA(i, MifareClassic.KEY_DEFAULT)) {
-                        isAuthenticated = true;
-                    } else if (mif.authenticateSectorWithKeyA(i, MifareClassic.KEY_NFC_FORUM)) {
-                        isAuthenticated = true;
-                    } else if (mif.authenticateSectorWithKeyB(i, MifareClassic.KEY_DEFAULT)) {
-                        isAuthenticated = true;
-                    } else if (mif.authenticateSectorWithKeyB(i, MifareClassic.KEY_MIFARE_APPLICATION_DIRECTORY)) {
-                        isAuthenticated = true;
-                    } else if (mif.authenticateSectorWithKeyB(i, MifareClassic.KEY_NFC_FORUM)) {
-                        isAuthenticated = true;
-
-                    } else {
-                        Log.d("TAG", "blocknr: " + i + " Authorization denied ");
-                        textView.setText(textView.getText() + "\n" + "blocknr: " + i + " Authorization denied ");
-                    }
-
-                    if (isAuthenticated) {
-                        /*
-                        for (int block_index = 0; block_index < b_len; block_index++) {
-                            Log.d(TAG, "blockindex: " + block_index);
-                            textView.setText(textView.getText() + "\n" + "bl_index: " + block_index);
-                            byte[] block = mif.readBlock(block_index);
-                            String s_block = getHexString(block, block.length);
-                            Log.d(TAG, "blocknr: " + i + " data: " + s_block);
-                            textView.setText(textView.getText() + "\n" + "blnr: " + i + " dat:" + s_block);
-
-                        }*/
-
-
-                        int block_index = mif.sectorToBlock(i);
-                        Log.d(TAG, "blockindex: " + block_index);
-                        textView.setText(textView.getText() + "\n" + "bl_index: " + block_index);
-                        byte[] block = mif.readBlock(block_index);
-                        //String s_block = NfcUtils.ByteArrayToHexString(block);
-                        //String s_block = Arrays.toString(block);
-                        String s_block = getHexString(block, block.length);
-                        Log.d(TAG, "blocknr: " + i + " data: " + s_block);
-                        textView.setText(textView.getText() + "\n" + "blnr: " + i + " dat:" + s_block);
-
-                        int blocksInSector = mif.getBlockCountInSector(i);
-                        Log.d(TAG, "blocksInSector: " + blocksInSector);
-                        textView.setText(textView.getText() + "\n" + "bl_in_sect: " + blocksInSector);
-                        // first block is already read
-                        for (int blockInSectorCount = 1; blockInSectorCount < blocksInSector; blockInSectorCount++) {
-                            // get following data
-                            block = mif.readBlock((block_index + blockInSectorCount));
-                            s_block = getHexString(block, block.length);
-                            Log.d(TAG, "blsnr: " + i + " data: " + s_block);
-                            textView.setText(textView.getText() + "\n" + "blsnr: " + blocksInSector + " d:" + s_block);
-                        }
-
-                    }
-                }
+        Thread thread = new Thread(){
+            public void run(){
+                System.out.println("Thread Running");
+                Log.d(TAG, "## THREAD RUNNING ##");
+                textView.setText(textView.getText() + "\n" + "## THREAD RUNNING ##");
+                readTagOwn(mif);
             }
-            mif.close();
+        };
 
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
+        thread.start();
 
 
 
@@ -165,6 +127,175 @@ public class MainActivity extends AppCompatActivity {
         } catch (IOException e) {
             e.printStackTrace();
         }*/
+
+    }
+
+    // you need to use this method to write to the textview from a background thread
+    // source: https://stackoverflow.com/a/25488292/8166854
+    private void setText(final TextView text,final String value){
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                text.setText(value);
+            }
+        });
+    }
+
+    // this code reads all elements
+    private void readTagOwn(MifareClassic mif) {
+        String output = "";
+        int s_len = mif.getSectorCount();
+        try {
+            mif.connect();
+            if (mif.isConnected()) {
+
+                for (int sectorCount = 0; sectorCount < s_len; sectorCount++) {
+
+                    boolean isAuthenticated = false;
+                    // try to authenticate with known keys - no brute force
+                    if (mif.authenticateSectorWithKeyA(sectorCount, MifareClassic.KEY_MIFARE_APPLICATION_DIRECTORY)) {
+                        isAuthenticated = true;
+                    } else if (mif.authenticateSectorWithKeyA(sectorCount, MifareClassic.KEY_DEFAULT)) {
+                        isAuthenticated = true;
+                    } else if (mif.authenticateSectorWithKeyA(sectorCount, MifareClassic.KEY_NFC_FORUM)) {
+                        isAuthenticated = true;
+                    } else if (mif.authenticateSectorWithKeyB(sectorCount, MifareClassic.KEY_DEFAULT)) {
+                        isAuthenticated = true;
+                    } else if (mif.authenticateSectorWithKeyB(sectorCount, MifareClassic.KEY_MIFARE_APPLICATION_DIRECTORY)) {
+                        isAuthenticated = true;
+                    } else if (mif.authenticateSectorWithKeyB(sectorCount, MifareClassic.KEY_NFC_FORUM)) {
+                        isAuthenticated = true;
+
+                    } else {
+                        Log.d("TAG", "sector: " + sectorCount + " Authorization denied ");
+                        output = textView.getText() + "\n" + "sector: " + sectorCount + " Authorization denied ";
+                        // gives an error, no access to textview from background thread
+                        // textView.setText(textView.getText() + "\n" + "sector: " + sectorCount + " Authorization denied ");
+                    }
+
+                    if (isAuthenticated) {
+
+                        // get the blockindex
+                        int block_index = mif.sectorToBlock(sectorCount);
+                        Log.d(TAG, "blockindex: " + block_index);
+                        output = output + "\n" + "bl_index: " + block_index;
+                        //textView.setText(textView.getText() + "\n" + "bl_index: " + block_index);
+
+                        // get block in sector
+                        int blocksInSector = mif.getBlockCountInSector(sectorCount);
+                        Log.d(TAG, "blocksInSector: " + blocksInSector);
+                        output = output + "\n" + "bl_in_sect: " + blocksInSector;
+                        //textView.setText(textView.getText() + "\n" + "bl_in_sect: " + blocksInSector);
+
+                        // get the data of each block
+                        byte[] block = mif.readBlock(block_index);
+                        String s_block = getHexString(block, block.length);
+                        Log.d(TAG, "sector: " + sectorCount + " data: " + s_block);
+                        output = output + "\n" + "sector: " + sectorCount + " dat:" + s_block;
+                        //textView.setText(textView.getText() + "\n" + "sector: " + sectorCount + " dat:" + s_block);
+
+                        // first block is already read
+                        for (int blockInSectorCount = 1; blockInSectorCount < blocksInSector; blockInSectorCount++) {
+                            // get following data
+                            block = mif.readBlock((block_index + blockInSectorCount));
+                            s_block = getHexString(block, block.length);
+                            Log.d(TAG, "sector: " + sectorCount + " data: " + s_block);
+                            output = output + "\n" + "blsnr: " + blocksInSector + " d:" + s_block;
+                            //textView.setText(textView.getText() + "\n" + "blsnr: " + blocksInSector + " d:" + s_block);
+
+                        }
+                    }
+                }
+            }
+            mif.close();
+
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        setText(textView, output);
+    }
+
+    // the problem with this code is... it is running so fast that the ui can't update all textview fields
+    private void readTagOwnOld(MifareClassic mif) {
+        int s_len = mif.getSectorCount();
+        try {
+            mif.connect();
+            if (mif.isConnected()) {
+
+                for (int sectorCount = 0; sectorCount < s_len; sectorCount++) {
+
+                    boolean isAuthenticated = false;
+                    // try to authenticate with known keys - no brute force
+                    if (mif.authenticateSectorWithKeyA(sectorCount, MifareClassic.KEY_MIFARE_APPLICATION_DIRECTORY)) {
+                        isAuthenticated = true;
+                    } else if (mif.authenticateSectorWithKeyA(sectorCount, MifareClassic.KEY_DEFAULT)) {
+                        isAuthenticated = true;
+                    } else if (mif.authenticateSectorWithKeyA(sectorCount, MifareClassic.KEY_NFC_FORUM)) {
+                        isAuthenticated = true;
+                    } else if (mif.authenticateSectorWithKeyB(sectorCount, MifareClassic.KEY_DEFAULT)) {
+                        isAuthenticated = true;
+                    } else if (mif.authenticateSectorWithKeyB(sectorCount, MifareClassic.KEY_MIFARE_APPLICATION_DIRECTORY)) {
+                        isAuthenticated = true;
+                    } else if (mif.authenticateSectorWithKeyB(sectorCount, MifareClassic.KEY_NFC_FORUM)) {
+                        isAuthenticated = true;
+
+                    } else {
+                        Log.d("TAG", "sector: " + sectorCount + " Authorization denied ");
+                        setText(textView, textView.getText() + "\n" + "sector: " + sectorCount + " Authorization denied ");
+                        // gives an error, no access to textview from background thread
+                        // textView.setText(textView.getText() + "\n" + "sector: " + sectorCount + " Authorization denied ");
+                    }
+
+                    if (isAuthenticated) {
+
+                        // get the blockindex
+                        int block_index = mif.sectorToBlock(sectorCount);
+                        Log.d(TAG, "blockindex: " + block_index);
+                        setText(textView, textView.getText() + "\n" + "bl_index: " + block_index);
+                        //textView.setText(textView.getText() + "\n" + "bl_index: " + block_index);
+
+                        // get block in sector
+                        int blocksInSector = mif.getBlockCountInSector(sectorCount);
+                        Log.d(TAG, "blocksInSector: " + blocksInSector);
+                        setText(textView, textView.getText() + "\n" + "bl_in_sect: " + blocksInSector);
+                        //textView.setText(textView.getText() + "\n" + "bl_in_sect: " + blocksInSector);
+
+                        /*
+                        // get the data of each block
+                        for (int blockInSectorCount = 0; blockInSectorCount < blocksInSector; blockInSectorCount++) {
+                            // get following data
+                            byte[] block = mif.readBlock((block_index + blockInSectorCount));
+                            String s_block = getHexString(block, block.length);
+                            Log.d(TAG, "sector: " + sectorCount + " data: " + s_block);
+                            textView.setText(textView.getText() + "\n" + "bliS: " + blockInSectorCount + " dat:" + s_block);
+                        }*/
+
+                        // get the data of each block
+                        byte[] block = mif.readBlock(block_index);
+                        String s_block = getHexString(block, block.length);
+                        Log.d(TAG, "sector: " + sectorCount + " data: " + s_block);
+                        setText(textView, textView.getText() + "\n" + "sector: " + sectorCount + " dat:" + s_block);
+                        //textView.setText(textView.getText() + "\n" + "sector: " + sectorCount + " dat:" + s_block);
+
+                        // first block is already read
+                        for (int blockInSectorCount = 1; blockInSectorCount < blocksInSector; blockInSectorCount++) {
+                            // get following data
+                            block = mif.readBlock((block_index + blockInSectorCount));
+                            s_block = getHexString(block, block.length);
+                            Log.d(TAG, "sector: " + sectorCount + " data: " + s_block);
+                            setText(textView, textView.getText() + "\n" + "blsnr: " + blocksInSector + " d:" + s_block);
+                            //textView.setText(textView.getText() + "\n" + "blsnr: " + blocksInSector + " d:" + s_block);
+
+                        }
+
+                    }
+                }
+            }
+            mif.close();
+
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
 
     }
 
@@ -206,7 +337,7 @@ public class MainActivity extends AppCompatActivity {
             if (pos >= len)
                 break;
 
-            pos++;//    w  ww  .   d e  m   o 2  s  .  c  o  m
+            pos++;
             int v = b & 0xFF;
             hex[index++] = HEX_CHAR_TABLE[v >>> 4];
             hex[index++] = HEX_CHAR_TABLE[v & 0xF];

@@ -12,5 +12,5 @@ dependencyResolutionManagement {
         mavenCentral()
     }
 }
-rootProject.name = "AndroidNfcOwn1"
+rootProject.name = "AndroidNfcOwn2"
 include ':app'
